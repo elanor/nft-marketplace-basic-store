@@ -80,3 +80,23 @@
     @apply bg-background text-foreground font-serif;
   }
 }
+
+input::placeholder {
+  color: #888; 
+  opacity: 1;  
+}
+
+input:focus::placeholder {
+  color: #ccc;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+

@@ -1,26 +1,15 @@
-// src/app/discover/closet/page.tsx
-
 "use client";
 
 import React, { useEffect, useState } from "react";
-import {
-  getAssetsByOwner,
-  fetchNFTDetails,
-  extractGroupAddress,
-} from "@/utils/getAssets";
+import { getNFTDetail, getNFTList } from "@/utils/nftMarket";
+import { useAnchorWallet, useConnection } from "@solana/wallet-adapter-react";
 import Image from "next/image";
 import Link from "next/link";
-import { FaExternalLinkAlt } from "react-icons/fa";
-import {
-  useAnchorWallet,
-  useConnection,
-  useWallet,
-} from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
 import Card from "@/components/Card";
 import Skeleton from "@/components/Skeleton";
-import { getNFTDetail, getNFTList } from "@/utils/nftMarket";
-import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
+import { FaExternalLinkAlt } from "react-icons/fa";
+import { AnchorProvider } from "@coral-xyz/anchor";
 
 export interface NFTDetail {
   name: string;
@@ -33,59 +22,68 @@ export interface NFTDetail {
   listing: string;
 }
 
-const trimAddress = (address: string) =>
-  `${address.slice(0, 4)}...${address.slice(-4)}`;
-
 const Closet: React.FC = () => {
-  const { publicKey } = useWallet();
-  const [walletAddress, setWalletAddress] = useState<string>("");
   const [assets, setAssets] = useState<NFTDetail[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    collection: "",
+    collectionCategory: "",
+    priceRange: { min: null, max: null }, 
+    category: "",
+    type: "",
+  });
   const wallet = useAnchorWallet();
   const { connection } = useConnection();
 
-  useEffect(() => {
-    const storedWalletAddress = sessionStorage.getItem("walletAddress");
-    const storedAssets = sessionStorage.getItem("assets");
-
-    if (storedWalletAddress) {
-      setWalletAddress(storedWalletAddress);
-    }
-
-    if (storedAssets) {
-      setAssets(JSON.parse(storedAssets));
-    }
-    fetchNFTs();
-  }, []);
-
-  // useEffect(() => {
-  //   fetchAssets();
-  // }, [publicKey]);
+  // Example options
+  const categoryOptions = ["Featured", "Trending", "New Releases", "Limited Edition"];
+  const typeOptions = ["Dresses", "Shirts", "Trousers"];
+  const collectionCategoryOptions = [
+    "Collection 1",
+    "Collection 2",
+    "Collection 3",
+    "Collection 4",
+  ];
 
   useEffect(() => {
     fetchNFTs();
-  }, [wallet]);
-
-  useEffect(() => {
-    sessionStorage.setItem("walletAddress", walletAddress);
-  }, [walletAddress]);
-
-  useEffect(() => {
-    sessionStorage.setItem("assets", JSON.stringify(assets));
-  }, [assets]);
+  }, [wallet, filters]);
 
   const fetchNFTs = async () => {
     setIsLoading(true);
-    const provider = new AnchorProvider(connection, wallet as Wallet, {});
+    const provider = new AnchorProvider(connection, wallet!, {});
 
     try {
       const listings = await getNFTList(provider, connection);
-      // const mint = new PublicKey(listings[0].mint);
-      // const detail = await getNFTDetail(mint, connection);
-      console.log(listings);
-      const promises = listings
+      const filteredListings = listings
         .filter((list) => list.isActive)
+        .filter((list) => {
+          // Apply filters conditionally
+          if (filters.collection && list.collection !== filters.collection)
+            return false;
+          if (
+            filters.collectionCategory &&
+            list.collectionCategory !== filters.collectionCategory
+          )
+            return false;
+
+          const priceInSOL = list.price / 1_000_000; // Assuming price is in lamports
+          if (
+            filters.priceRange.min !== null &&
+            priceInSOL < filters.priceRange.min
+          )
+            return false;
+          if (
+            filters.priceRange.max !== null &&
+            priceInSOL > filters.priceRange.max
+          )
+            return false;
+          if (filters.category && list.category !== filters.category)
+            return false;
+          if (filters.type && list.type !== filters.type) return false;
+
+          return true;
+        })
         .map((list) => {
           const mint = new PublicKey(list.mint);
           return getNFTDetail(
@@ -96,26 +94,103 @@ const Closet: React.FC = () => {
             list.pubkey
           );
         });
-      const detailedListings = await Promise.all(promises);
-      console.log(detailedListings);
-      //return detailedListings;
 
+      const detailedListings = await Promise.all(filteredListings);
       setAssets(detailedListings);
-    } catch (errr) {
-      console.log(errr);
+    } catch (error) {
+      console.error("Error fetching NFTs:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const trimAddress = (address: string) =>
+    `${address.slice(0, 4)}...${address.slice(-4)}`;
+
   return (
     <div className="p-4 pt-20 bg-white dark:bg-black min-h-screen">
       <h1 className="text-3xl font-bold mb-4 text-center text-black dark:text-white">
-        NFTs on sale
+        NFTs on Sale
       </h1>
 
-      {error && <div className="text-red-500 text-center mb-4">{error}</div>}
+      {/* Filter UI */}
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <select
+          className="p-2 border rounded"
+          value={filters.collectionCategory}
+          onChange={(e) =>
+            setFilters({ ...filters, collectionCategory: e.target.value })
+          }
+        >
+          <option value="">Collection</option>
+          {collectionCategoryOptions.map((collectionCategory) => (
+            <option key={collectionCategory} value={collectionCategory}>
+              {collectionCategory}
+            </option>
+          ))}
+        </select>
 
+        <input
+          className="p-2 border rounded no-arrows"
+          placeholder="Min Price"
+          type="number"
+          value={filters.priceRange.min === null ? "" : filters.priceRange.min}
+          onChange={(e) =>
+            setFilters({
+              ...filters,
+              priceRange: {
+                ...filters.priceRange,
+                min: e.target.value === "" ? null : Number(e.target.value),
+              },
+            })
+          }
+        />
+        <input
+          className="p-2 border rounded no-arrows"
+          placeholder="Max Price"
+          type="number"
+          value={filters.priceRange.max === null ? "" : filters.priceRange.max}
+          onChange={(e) =>
+            setFilters({
+              ...filters,
+              priceRange: {
+                ...filters.priceRange,
+                max: e.target.value === "" ? null : Number(e.target.value),
+              },
+            })
+          }
+        />
+
+        <select
+          className="p-2 border rounded"
+          value={filters.category}
+          onChange={(e) =>
+            setFilters({ ...filters, category: e.target.value })
+          }
+        >
+          <option value="">Category</option>
+          {categoryOptions.map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="p-2 border rounded"
+          value={filters.type}
+          onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+        >
+          <option value="">Type</option>
+          {typeOptions.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* NFTs Display */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, index) => (
@@ -158,16 +233,6 @@ const Closet: React.FC = () => {
                   {trimAddress(asset.mint)}{" "}
                   <FaExternalLinkAlt className="ml-1" />
                 </Link>
-                {asset.group && (
-                  <Link
-                    href={`https://solana.fm/address/${asset.group}`}
-                    target="_blank"
-                    className="hover:text-gray-300 flex items-center"
-                  >
-                    Group: {trimAddress(asset.group)}{" "}
-                    <FaExternalLinkAlt className="ml-1" />
-                  </Link>
-                )}
               </div>
             </div>
           ))}

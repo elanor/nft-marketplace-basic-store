@@ -7,8 +7,8 @@ import { useRouter } from 'next/navigation';
 const Register = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [email, setEmail] = useState(''); // New state for email
-  const [solanaWallet, setSolanaWallet] = useState(''); // New state for Solana wallet
+  const [email, setEmail] = useState('');
+  const [solanaWallet, setSolanaWallet] = useState(''); 
   const [error, setError] = useState('');
   const router = useRouter();
 
@@ -18,15 +18,21 @@ const Register = () => {
       const response = await axios.post('http://localhost:4000/api/register', {
         username,
         password,
-        email, // Include email
-        solanaWallet, // Include Solana wallet address
+        email,
+        solanaWallet,
       });
       if (response.status === 201) {
         router.push('/login');
       }
-    } catch (err) {
-      setError('Registration failed. Please try again.');
+    } catch (err: any) {
+      if (err.response && err.response.status === 409) {
+        // Assume 409 means conflict, such as "user already exists"
+        setError('The user exists. Please register with a new email.');
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     }
+    
   };
 
   return (
